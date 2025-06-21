@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <CubeBlocks>
+        <Definition xsi:type="MyObjectBuilder_UpgradeModuleDefinition">
+            <Id>
+                <TypeId>UpgradeModule</TypeId>
+                <SubtypeId>LargeShieldGenerator</SubtypeId>
+            </Id>
+            <DisplayName>Large Shield Generator</DisplayName>
+            <Icon>Textures\GUI\Icons\Cubes\Projector.dds</Icon>
+            <Game>SpaceEngineers</Game>
+            <CubeSize>Large</CubeSize>
+            <BlockTopology>TriangleMesh</BlockTopology>
+            <Size x="1" y="1" z="1" />
+            <ModelOffset x="0" y="0" z="0" />
+            <Model>Models\Cubes\Large\Projector.mwm</Model>
+            <Components>
+                <Component Subtype="SteelPlate" Count="80" />
+                <Component Subtype="Construction" Count="60" />
+                <Component Subtype="GravityGenerator" Count="20" />
+                <Component Subtype="Superconductor" Count="80" />
+                <Component Subtype="Computer" Count="150" />
+            </Components>
+            <CriticalComponent Subtype="Computer" Index="4" />
+            <MountPoints>
+                <MountPoint Side="Bottom" StartX="0" StartY="0" EndX="1" EndY="1" Default="true"/>
+                <MountPoint Side="Top" StartX="0" StartY="0" EndX="1" EndY="1"/>
+                <MountPoint Side="Left" StartX="0" StartY="0" EndX="1" EndY="1"/>
+                <MountPoint Side="Right" StartX="0" StartY="0" EndX="1" EndY="1"/>
+                <MountPoint Side="Front" StartX="0" StartY="0" EndX="1" EndY="1"/>
+                <MountPoint Side="Back" StartX="0" StartY="0" EndX="1" EndY="1"/>
+            </MountPoints>
+            <BuildProgressModels>
+                <Model BuildPercentUpperBound="0.50" File="Models\Cubes\Large\Projector_Construction1.mwm"/>
+                <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\Projector_Construction2.mwm"/>
+            </BuildProgressModels>
+            <BlockPairName>ShieldGenerator</BlockPairName>
+            <MirroringY>Z</MirroringY>
+            <MirroringZ>Y</MirroringZ>
+            <EdgeType>Light</EdgeType>
+            <EmissiveColorPreset>Default</EmissiveColorPreset>
+            <DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
+            <DamagedSound>ParticleElectrical</DamagedSound>
+            <DestroyEffect>BlockDestroyed_Large</DestroyEffect>
+        </Definition>
+
+        <Definition xsi:type="MyObjectBuilder_UpgradeModuleDefinition">
+            <Id>
+                <TypeId>UpgradeModule</TypeId>
+                <SubtypeId>SmallShieldGenerator</SubtypeId>
+            </Id>
+            <DisplayName>Small Shield Generator</DisplayName>
+            <Icon>Textures\GUI\Icons\Cubes\Projector_small.dds</Icon>
+            <Game>SpaceEngineers</Game>
+            <CubeSize>Small</CubeSize>
+            <BlockTopology>TriangleMesh</BlockTopology>
+            <Size x="1" y="1" z="1" />
+            <ModelOffset x="0" y="0" z="0" />
+            <Model>Models\Cubes\Small\Projector.mwm</Model>
+            <Components>
+                <Component Subtype="SteelPlate" Count="15" />
+                <Component Subtype="Construction" Count="10" />
+                <Component Subtype="GravityGenerator" Count="2" />
+                <Component Subtype="Superconductor" Count="10" />
+                <Component Subtype="Computer" Count="20" />
+            </Components>
+            <CriticalComponent Subtype="Computer" Index="4" />
+            <BuildProgressModels>
+                <Model BuildPercentUpperBound="0.50" File="Models\Cubes\Small\Projector_Construction1.mwm"/>
+                <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Small\Projector_Construction2.mwm"/>
+            </BuildProgressModels>
+            <BlockPairName>ShieldGenerator</BlockPairName>
+            <EdgeType>Light</EdgeType>
+            <EmissiveColorPreset>Default</EmissiveColorPreset>
+            <DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
+            <DamagedSound>ParticleElectrical</DamagedSound>
+            <DestroyEffect>BlockDestroyed_Small</DestroyEffect>
+        </Definition>
+    </CubeBlocks>
+</Definitions>
