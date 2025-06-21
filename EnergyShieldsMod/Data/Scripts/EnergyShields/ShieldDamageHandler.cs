@@ -119,12 +119,19 @@ namespace EnergyShields
 
             // --- Core Logic for Damage vs. Visuals in Creative Mode ---
 
-            // Always trigger visual impact if the shield is active and a hit position is valid.
-            // This ensures visual feedback even if shield is full or damage is zero (e.g., creative mode).
-            if (hitPosition.HasValue && shield.IsActive)
+            // Always trigger visual impact if the shield is active (or if it's a zero-damage hit in creative-like scenarios)
+            // and a valid hit position exists. This ensures visual feedback even if shield is full or damage is zero.
+            if (hitPosition.HasValue && shield.IsActive) // If shield is active, we want visuals.
             {
                 shield.TriggerVisualImpact(hitPosition.Value);
             }
+            else if (hitPosition.HasValue && info.Amount == 0) // If not active, but it's a 0-damage hit (creative), still trigger visuals.
+            {
+                // This 'else if' specifically handles the creative mode scenario where shield.IsActive might be false
+                // due to power or being broken, but you still want visuals from a 'hit' that does no damage.
+                shield.TriggerVisualImpact(hitPosition.Value);
+            }
+
 
             // Only proceed with actual damage absorption if the shield is active AND not broken AND there's actual damage.
             if (shield.IsActive && !shield.IsBroken && info.Amount > 0)
@@ -133,7 +140,7 @@ namespace EnergyShields
                 
                 if (damageToAbsorb > 0)
                 {
-                    // Call TakeDamage which only handles HP reduction and resets recharge delay.
+                    // Call TakeDamage which now only handles HP reduction and resets recharge delay.
                     shield.TakeDamage(damageToAbsorb); 
                     info.Amount -= damageToAbsorb; // Reduce original damage
                 }
