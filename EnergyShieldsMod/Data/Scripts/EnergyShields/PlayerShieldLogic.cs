@@ -2,7 +2,8 @@ using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
-using Sandbox.Game.Entities.Character.Components;
+using Sandbox.Game.Entities.Character.Components; // Ensure this is present for SuitEnergyLevel
+using VRageMath; // Added for Vector3D
 
 namespace EnergyShields
 {
@@ -16,6 +17,10 @@ namespace EnergyShields
         private IMyCharacter _playerCharacter;
         private bool _isShieldManaged = false;
         private ShieldRenderer _renderer;
+
+        // Adjustable constant for the player shield's default range
+        // Changed back to 2 meters as requested.
+        private const float DefaultPlayerShieldRange = 2f; 
 
         /// <summary>
         /// Tears down the shield and unregisters it.
@@ -46,32 +51,19 @@ namespace EnergyShields
             {
                 TeardownShield();
                 _playerCharacter = currentCharacter;
-            }
 
-            if (_playerCharacter == null || _playerCharacter.MarkedForClose)
-            {
-                // If character is gone, ensure everything is torn down and exit.
-                if (_isShieldManaged) TeardownShield();
-                return;
-            }
-
-            // Disable shield when jetpack is active.
-            var jetpack = _playerCharacter.Components.Get<MyCharacterJetpackComponent>();
-            if (jetpack != null && jetpack.IsFlying)
-            {
-                if (_isShieldManaged)
+                if (_playerCharacter != null)
                 {
-                    TeardownShield();
-                    MyAPIGateway.Utilities.ShowNotification("Personal shield offline: Jetpack active.", 1500, "Red");
+                    // Optionally show a notification when character changes and shield is being set up
+                    // MyAPIGateway.Utilities.ShowNotification("Character changed. Setting up shield.", 1500, "Blue");
                 }
-                // No need to update renderer if shield is torn down.
-                return;
             }
 
-            // If the shield should be active but isn't, create it.
-            if (!_isShieldManaged)
+            // If the character exists and the shield isn't managed yet, create it.
+            if (!_isShieldManaged && _playerCharacter != null)
             {
-                _playerShield = new ModularShield(2f); // Set a small, visible range for the player shield
+                // The player shield will always be a ModularShield for fast recovery.
+                _playerShield = new ModularShield(DefaultPlayerShieldRange); 
                 _playerShield.OnShieldHit += OnShieldHit;
                 ShieldDamageHandler.RegisterShield(_playerCharacter, _playerShield);
                 _renderer = new ShieldRenderer(_playerCharacter, _playerShield);
@@ -84,16 +76,24 @@ namespace EnergyShields
             {
                 // The ModAPI does not provide a way to directly drain suit energy.
                 // Instead, we just check if the suit has any power and deactivate the shield if it runs out.
+                // It seems SuitEnergyLevel is part of Sandbox.Game.Entities.Character.Components, ensure it's accessible.
                 _playerShield.IsActive = _playerCharacter.SuitEnergyLevel > 0;
+                
                 if (_playerShield.IsActive)
-                    _playerShield.Update(1f / 60f);
+                {
+                    _playerShield.Update(1f / 60f); // Update shield state (recharge, etc.) assuming 60 FPS
+                }
             }
 
-            // Always update the renderer to handle lingering effects
+            // Always update the renderer to handle lingering effects (impacts, ripples)
             _renderer?.Update();
         }
 
-        private void OnShieldHit(VRageMath.Vector3D position)
+        /// <summary>
+        /// Event handler for when the shield takes a hit.
+        /// </summary>
+        /// <param name="position">The world position of the impact.</param>
+        private void OnShieldHit(Vector3D position) // Ensure correct delegate matches Action<Vector3D>
         {
             _renderer?.CreateImpactEffect(position);
         }

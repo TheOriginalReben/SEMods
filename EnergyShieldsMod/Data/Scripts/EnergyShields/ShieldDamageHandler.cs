@@ -4,7 +4,7 @@ using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
-using VRageMath;
+using VRageMath; // Added for Vector3D
 
 namespace EnergyShields
 {
@@ -17,7 +17,8 @@ namespace EnergyShields
     {
         private static ShieldDamageHandler _instance;
         // We map the entity (grid or character) to its shield controller
-        private static readonly Dictionary<IMyEntity, IShield> ActiveShields = new Dictionary<IMyEntity, IShield>();
+        // Changed to internal for accessibility from other mod classes within the same assembly.
+        internal static readonly Dictionary<IMyEntity, IShield> ActiveShields = new Dictionary<IMyEntity, IShield>();
 
         public override void LoadData()
         {
@@ -63,17 +64,30 @@ namespace EnergyShields
         }
 
         /// <summary>
+        /// Checks if an entity currently has an active shield registered.
+        /// </summary>
+        /// <param name="entity">The entity to check.</param>
+        /// <returns>True if a shield is registered for the entity, false otherwise.</returns>
+        public static bool IsShieldRegistered(IMyEntity entity)
+        {
+            return ActiveShields.ContainsKey(entity);
+        }
+
+        /// <summary>
         /// This method is called by the game before any damage is applied.
+        /// It intercepts damage and redirects it to the shield if one is active.
         /// </summary>
         private void OnDamageTaking(object target, ref MyDamageInformation info)
         {
-            IMyEntity shieldEntity = null;
+            IMyEntity shieldCandidateEntity = null;
             Vector3D? hitPosition = null;
             
+            // Determine the actual entity that owns the shield
             var block = target as IMySlimBlock;
             if (block != null)
             {
-                shieldEntity = block.CubeGrid;
+                shieldCandidateEntity = block.CubeGrid;
+                // For blocks, calculate the world center as the approximate hit position
                 Vector3D worldPos;
                 block.ComputeWorldCenter(out worldPos);
                 hitPosition = worldPos;
@@ -83,37 +97,49 @@ namespace EnergyShields
                 var character = target as IMyCharacter;
                 if (character != null)
                 {
-                    shieldEntity = character;
-                    // Use the character's bounding box center for a more accurate hit position.
+                    shieldCandidateEntity = character;
+                    // For characters, use their bounding box center as the hit position
                     hitPosition = character.WorldAABB.Center;
                 }
             }
 
+            // If no valid shield candidate entity, or no shield registered for it, return.
             IShield shield;
-            if (shieldEntity == null || !ActiveShields.TryGetValue(shieldEntity, out shield))
+            if (shieldCandidateEntity == null || !ActiveShields.TryGetValue(shieldCandidateEntity, out shield))
             {
-                return; // No shield on this entity.
+                return; // No shield on this entity, allow damage to pass through.
             }
 
-            // Check if the point of impact is within the shield's radius. This is crucial for explosions and large grids.
-            if (hitPosition.HasValue && Vector3D.DistanceSquared(shieldEntity.WorldMatrix.Translation, hitPosition.Value) > (shield.Range * shield.Range))
+            // Important: Check if the point of impact is within the shield's radius.
+            // This is crucial for explosions and large grids.
+            if (hitPosition.HasValue && Vector3D.DistanceSquared(shieldCandidateEntity.WorldMatrix.Translation, hitPosition.Value) > (shield.Range * shield.Range))
             {
-                return; // Damage occurred outside the shield's protection radius.
+                return; // Damage occurred outside the shield's protection radius, allow damage to pass through.
             }
 
-            if (!shield.IsActive || shield.IsBroken)
+            // --- Core Logic for Damage vs. Visuals in Creative Mode ---
+
+            // Always trigger visual impact if the shield is active and a hit position is valid.
+            // This ensures visual feedback even if shield is full or damage is zero (e.g., creative mode).
+            if (hitPosition.HasValue && shield.IsActive)
             {
-                return; // Shield is offline or broken.
+                shield.TriggerVisualImpact(hitPosition.Value);
             }
 
-            float damageToAbsorb = Math.Min(shield.CurrentHp, info.Amount);
-            if (damageToAbsorb <= 0) return;
-
-            shield.TakeDamage(damageToAbsorb, hitPosition);
-            info.Amount -= damageToAbsorb;
-
-            // This is useful for debugging, but can be spammy in gameplay.
-            // MyAPIGateway.Utilities.ShowNotification($"Shield absorbed {damageToAbsorb:F0} damage. HP: {shield.CurrentHp:F0}", 1000);
+            // Only proceed with actual damage absorption if the shield is active AND not broken AND there's actual damage.
+            if (shield.IsActive && !shield.IsBroken && info.Amount > 0)
+            {
+                float damageToAbsorb = Math.Min(shield.CurrentHp, info.Amount);
+                
+                if (damageToAbsorb > 0)
+                {
+                    // Call TakeDamage which only handles HP reduction and resets recharge delay.
+                    shield.TakeDamage(damageToAbsorb); 
+                    info.Amount -= damageToAbsorb; // Reduce original damage
+                }
+            }
+            // If shield is inactive, broken, or info.Amount is 0 (and not a creative mode-only visual trigger),
+            // damage passes through without affecting the shield's HP.
         }
     }
 }
