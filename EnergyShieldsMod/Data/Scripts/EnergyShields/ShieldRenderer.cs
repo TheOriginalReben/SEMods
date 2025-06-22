@@ -48,17 +48,17 @@ namespace EnergyShields
             }
 
             // Determine rendering parameters based on view mode
-            int currentSubdivisionLevel;
+            int currentSubdivisionLevel; // This is not used in DrawWireframeSphere directly
             float currentLineThickness; 
 
             if (isLocalPlayerCharacter && MyAPIGateway.Session.CameraController.IsInFirstPersonView)
             {
-                currentSubdivisionLevel = 0; 
+                currentSubdivisionLevel = 0; // Not used for DrawWireframeSphere
                 currentLineThickness = 0.0005f; 
             }
             else
             {
-                currentSubdivisionLevel = 2; 
+                currentSubdivisionLevel = 2; // Not used for DrawWireframeSphere
                 currentLineThickness = 0.002f; 
             }
 
@@ -91,14 +91,21 @@ namespace EnergyShields
             }
             else // Generic Shield
             {
-                // Render the classic wireframe sphere
+                // --- Draw the shield sphere itself ---
+                // Replaced MySimpleObjectDraw.DrawTransparentSphere with DrawWireframeSphere helper
+
+                // For the "filled" sphere (using wireframe with a denser, more transparent color)
+                Color filledSphereColor = Color.CornflowerBlue * 0.1f;
+                Vector4 filledSphereColorV4 = filledSphereColor.ToVector4(); // Convert to Vector4
+                ShieldRenderer.DrawWireframeSphere(shieldCenter, _shield.Range, filledSphereColorV4, _hexSolidMaterial, currentLineThickness * 0.5f);
+
+                // For the "wireframe" sphere (using a more distinct color and thickness)
                 float healthPercent = _shield.CurrentHp / _shield.MaxHp;
                 Color baseColor = Color.Cyan;
-                var color = Color.Lerp(Color.Red, baseColor, healthPercent);
-                color.A = (byte)(80 + color.A); // Corrected alpha calculation
-                Vector4 colorV4 = color.ToVector4();
-                
-                ShieldRenderer.DrawWireframeSphere(shieldCenter, _shield.Range, colorV4, _sphereLineMaterial, currentLineThickness);
+                var wireframeSphereColor = Color.Lerp(Color.Red, baseColor, healthPercent);
+                wireframeSphereColor.A = (byte)(80 + wireframeSphereColor.A); // Corrected alpha calculation
+                Vector4 wireframeSphereColorV4 = wireframeSphereColor.ToVector4(); // Convert to Vector4
+                ShieldRenderer.DrawWireframeSphere(shieldCenter, _shield.Range, wireframeSphereColorV4, _sphereLineMaterial, currentLineThickness);
             }
 
             // Update and draw impact effects

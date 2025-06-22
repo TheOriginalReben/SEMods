@@ -194,7 +194,7 @@ namespace EnergyShields
             switch (ShieldTypeSetting)
             {
                 case ShieldType.Modular:
-                    _shield = new ModularShield(RangeSetting);
+                    _shield = new ModularShield(RangeSetting, _grid);
                     break;
                 case ShieldType.Generic:
                 default:

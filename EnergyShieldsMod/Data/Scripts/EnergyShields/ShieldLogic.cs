@@ -98,10 +98,18 @@ namespace EnergyShields
         event Action<Vector3D> OnShieldHit; // Event for when the shield takes damage visuals
 
         /// <summary>
-        /// Reduces shield HP by a given amount. Does NOT trigger visual effects.
+        /// Reduces shield HP by a given amount, distributed evenly or generally. Does NOT trigger visual effects.
         /// </summary>
         /// <param name="amount">The amount of damage to take.</param>
-        void TakeDamage(float amount); // Removed hitPosition parameter
+        void TakeDamage(float amount);
+
+        /// <summary>
+        /// Reduces shield HP at a specific world position, finding the relevant zone if applicable.
+        /// Does NOT trigger visual effects directly (TriggerVisualImpact should be called separately).
+        /// </summary>
+        /// <param name="amount">The amount of damage to take.</param>
+        /// <param name="hitPosition">The world position of the hit.</param>
+        void TakeDamageAtPosition(float amount, Vector3D hitPosition);
 
         /// <summary>
         /// Triggers a visual impact effect on the shield without modifying HP or recharge state.
@@ -169,9 +177,9 @@ namespace EnergyShields
             if (IsBroken)
             {
                 _timeSinceLastDamage += deltaSeconds;
+                // Only start regenerating after the RechargeDelaySeconds has passed
                 if (_timeSinceLastDamage >= RechargeDelaySeconds)
                 {
-                    // Start regenerating only after the delay
                     CurrentHp += RegenRatePerSecond * deltaSeconds;
                     if (CurrentHp > MaxHp) CurrentHp = MaxHp; // Cap HP at MaxHp
                 }
@@ -240,7 +248,7 @@ namespace EnergyShields
         }
 
         /// <summary>
-        /// Reduces shield HP by a given amount. Does NOT trigger visual effects.
+        /// Reduces shield HP by a given amount, distributed evenly or generally. Does NOT trigger visual effects.
         /// This base implementation is for non-modular shields.
         /// </summary>
         /// <param name="amount">The amount of damage to apply.</param>
@@ -251,6 +259,17 @@ namespace EnergyShields
             CurrentHp -= amount;
             if (CurrentHp < 0) CurrentHp = 0;
             _timeSinceLastDamage = 0; // Reset recharge delay
+        }
+
+        /// <summary>
+        /// Applies damage at a specific position. For generic shields, this is the same as general TakeDamage.
+        /// Modular shields will override this to find a specific zone.
+        /// </summary>
+        /// <param name="amount">The amount of damage to take.</param>
+        /// <param name="hitPosition">The world position of the hit (ignored for generic shields).</param>
+        public virtual void TakeDamageAtPosition(float amount, Vector3D hitPosition)
+        {
+            TakeDamage(amount); // Default behavior is to apply damage generally
         }
 
         /// <summary>
@@ -303,8 +322,6 @@ namespace EnergyShields
 
             // CurrentHp scaling based on old MaxHp will happen in derived classes after their MaxHp is updated.
             // Reset delay if needed. The newMaxHp check was removed here as it's not available in base.
-            // Check if current HP is greater than newly calculated MaxHp (after range change) in derived class
-            // This is a simplified logic, exact MaxHp for proportionality is set in derived classes.
             // If the shield was broken, or if its scaled HP became zero, reset the timer.
             if (CurrentHp <= 0 || (oldMaxHp > 0 && MaxHp > 0 && CurrentHp / oldMaxHp > MaxHp / oldMaxHp)) // Adjusted condition for resetting delay
             {
@@ -328,10 +345,11 @@ namespace EnergyShields
 
         public GenericShield(float range) : base(range)
         {
+            // Initial setup using constants and range
             MaxHp = (float)(ShieldConstants.ShieldHpPerMeter * range * ShieldConstants.GenericShieldHpMultiplier);
-            CurrentHp = MaxHp;
-            RechargeDelaySeconds = 15f;
-            RegenRatePerSecond = MaxHp * 0.02f;
+            CurrentHp = MaxHp; // Start with full HP
+            RechargeDelaySeconds = 15f; // Long delay when broken.
+            RegenRatePerSecond = MaxHp * 0.02f; // Regenerates 2% of Max HP per second.
             PowerUsageWatts = (float)ShieldConstants.GenericShieldWattUsage;
             _timeSinceLastDamage = RechargeDelaySeconds; // Initialize base delay
         }
@@ -339,21 +357,23 @@ namespace EnergyShields
         public override void Recreate(float newRange)
         {
             float oldMaxHp = MaxHp;
-            base.Recreate(newRange); // Updates Range
+            base.Recreate(newRange); // Call base to update Range and possibly initial CurrentHp logic
 
+            // Recalculate Generic Shield specific properties
             MaxHp = (float)(ShieldConstants.ShieldHpPerMeter * newRange * ShieldConstants.GenericShieldHpMultiplier);
             RegenRatePerSecond = MaxHp * 0.02f;
             PowerUsageWatts = (float)ShieldConstants.GenericShieldWattUsage;
 
-            if (oldMaxHp > 0 && CurrentHp > 0)
+            // Adjust CurrentHp proportionally if it was not broken before resizing
+            if (oldMaxHp > 0 && CurrentHp > 0) // Only adjust if it had health before and is not broken now by base.Recreate()
             {
                 CurrentHp = (CurrentHp / oldMaxHp) * MaxHp;
-            } else if (CurrentHp <= 0)
+            } else if (CurrentHp <= 0) // If it was broken or became broken due to range reduction
             {
-                CurrentHp = 0;
-            } else
+                CurrentHp = 0; // Keep it broken
+            } else // If it was full and now MaxHp increased
             {
-                CurrentHp = MaxHp;
+                CurrentHp = MaxHp; // Set to new MaxHp
             }
         }
     }
@@ -366,6 +386,7 @@ namespace EnergyShields
     {
         public override ShieldType Type => ShieldType.Modular;
         private List<ShieldZone> _zones;
+        private IMyEntity _parentEntity; // Added to get world matrix for zone hit detection
 
         // Number of zones is based on a fixed subdivision level for the geodesic sphere.
         // Subdivision 0 (icosahedron) has 20 faces. Subdivision 1 has 80 faces, etc.
@@ -384,8 +405,9 @@ namespace EnergyShields
         // Modular shield has a short overall recharge delay when it breaks, but zones regen independently.
         private const float ModularShieldOverallRechargeDelaySeconds = 3f;
 
-        public ModularShield(float range) : base(range)
+        public ModularShield(float range, IMyEntity parentEntity) : base(range) // Added parentEntity parameter
         {
+            _parentEntity = parentEntity; // Store parent entity
             RechargeDelaySeconds = ModularShieldOverallRechargeDelaySeconds; // Overall shield delay
             _timeSinceLastDamage = RechargeDelaySeconds; // Initialize base delay for overall shield state
 
@@ -401,44 +423,84 @@ namespace EnergyShields
         private void InitializeZones(float currentRange)
         {
             _zones = new List<ShieldZone>();
-            // Calculate base HP and regen per zone.
-            // Distribute total shield HP and regen across all generated faces.
-            float totalModularHpPerMeter = (float)(ShieldConstants.ShieldHpPerMeter * ShieldConstants.ModularShieldHpMultiplier);
-            float totalModularRegenPerSecondPerMeter = totalModularHpPerMeter * 0.15f; // 15% regen rate from constants
+            
+            // Calculate the total HP this modular shield instance should have.
+            float totalCalculatedModularHp = (float)(ShieldConstants.ShieldHpPerMeter * currentRange * ShieldConstants.ModularShieldHpMultiplier);
 
-            // Calculate HP and regen for each zone based on the total number of faces.
-            float zoneMaxHpBase = totalModularHpPerMeter / _cachedGeodesicData.Faces.Count;
-            float zoneRegenRateBase = totalModularRegenPerSecondPerMeter / _cachedGeodesicData.Faces.Count;
-            float zoneRechargeDelay = 3f; // Individual zone recharge delay
+            // Each zone's MaxHp is now equal to the total calculated modular shield HP.
+            float zoneMaxHp = totalCalculatedModularHp; 
+            // Set zone regeneration rate to 30% of zone's max HP as requested.
+            float zoneRegenRate = zoneMaxHp * 0.30f; 
+            // Set the individual zone recharge delay to 10 seconds.
+            float zoneRechargeDelay = 10f; 
 
             foreach (var face in _cachedGeodesicData.Faces)
             {
-                // Each zone's HP is proportional to the overall range.
-                float zoneMaxHp = zoneMaxHpBase * currentRange;
-                float zoneRegenRate = zoneRegenRateBase * currentRange;
                 _zones.Add(new ShieldZone(zoneMaxHp, zoneRegenRate, zoneRechargeDelay));
             }
         }
 
         /// <summary>
         /// Applies damage to the modular shield by distributing it among all active zones.
+        /// This method is now used for non-localized damage, if any such scenario exists.
         /// </summary>
         /// <param name="amount">The total amount of damage to apply.</param>
         public override void TakeDamage(float amount)
         {
-            if (!IsActive || IsBroken) return; // Cannot take damage if inactive or already broken
+            if (!IsActive || IsBroken) return; 
 
-            // Distribute damage evenly across all zones for now.
-            // A more advanced implementation would find the closest zone to the hit point.
+            // Distribute damage evenly across all zones.
             float damagePerZone = amount / _zones.Count;
             foreach (var zone in _zones)
             {
                 zone.TakeDamage(damagePerZone);
             }
             
-            // Reset overall shield recharge delay if any zone took damage.
-            _timeSinceLastDamage = 0;
-            // CurrentHp and IsBroken will update via their getters.
+            _timeSinceLastDamage = 0; // Reset overall shield recharge delay
+        }
+
+        /// <summary>
+        /// Applies damage to the specific zone closest to the hit position.
+        /// </summary>
+        /// <param name="amount">The amount of damage to apply.</param>
+        /// <param name="hitPosition">The world position of the hit.</param>
+        public override void TakeDamageAtPosition(float amount, Vector3D hitPosition)
+        {
+            if (!IsActive || IsBroken) return;
+
+            // Find the closest zone to the hit position
+            ShieldZone closestZone = null;
+            double minDistanceSq = double.MaxValue;
+
+            Vector3D shieldCenter = _parentEntity.WorldMatrix.Translation;
+
+            for (int i = 0; i < _zones.Count; i++)
+            {
+                ShieldZone currentZone = _zones[i];
+                PolygonFace face = _cachedGeodesicData.Faces[i];
+
+                // Calculate the world center of this zone
+                Vector3D zoneWorldCenter = Vector3D.Zero;
+                foreach (int vertexIndex in face.VertexIndices)
+                {
+                    zoneWorldCenter += shieldCenter + _cachedGeodesicData.Vertices[vertexIndex] * Range;
+                }
+                zoneWorldCenter /= face.VertexIndices.Length;
+
+                double distanceSq = Vector3D.DistanceSquared(hitPosition, zoneWorldCenter);
+                if (distanceSq < minDistanceSq)
+                {
+                    minDistanceSq = distanceSq;
+                    closestZone = currentZone;
+                }
+            }
+
+            if (closestZone != null)
+            {
+                closestZone.TakeDamage(amount);
+            }
+            
+            _timeSinceLastDamage = 0; // Reset overall shield recharge delay
         }
 
         /// <summary>
@@ -474,16 +536,18 @@ namespace EnergyShields
             base.Recreate(newRange); // Updates Range
 
             // Recalculate parameters for each zone based on new range and update them.
-            float totalModularHpPerMeter = (float)(ShieldConstants.ShieldHpPerMeter * ShieldConstants.ModularShieldHpMultiplier);
-            float totalModularRegenPerSecondPerMeter = totalModularHpPerMeter * 0.15f; 
-
-            float zoneMaxHpBase = totalModularHpPerMeter / _cachedGeodesicData.Faces.Count;
-            float zoneRegenRateBase = totalModularRegenPerSecondPerMeter / _cachedGeodesicData.Faces.Count;
-            float zoneRechargeDelay = 3f;
+            float totalCalculatedModularHp = (float)(ShieldConstants.ShieldHpPerMeter * newRange * ShieldConstants.ModularShieldHpMultiplier);
+            
+            // Each zone's MaxHp is now equal to the total calculated modular shield HP.
+            float zoneMaxHp = totalCalculatedModularHp;
+            // Set zone regeneration rate to 30% of zone's max HP as requested.
+            float zoneRegenRate = zoneMaxHp * 0.30f; 
+            // Set the individual zone recharge delay to 10 seconds.
+            float zoneRechargeDelay = 10f;
 
             foreach (var zone in _zones)
             {
-                zone.SetNewParameters(zoneMaxHpBase * newRange, zoneRegenRateBase * newRange, zoneRechargeDelay);
+                zone.SetNewParameters(zoneMaxHp, zoneRegenRate, zoneRechargeDelay);
             }
             // Overall MaxHp, CurrentHp, etc. will update via their getters.
         }

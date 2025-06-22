@@ -63,7 +63,7 @@ namespace EnergyShields
             if (!_isShieldManaged && _playerCharacter != null)
             {
                 // The player shield will always be a ModularShield for fast recovery.
-                _playerShield = new ModularShield(DefaultPlayerShieldRange); 
+                _playerShield = new ModularShield(DefaultPlayerShieldRange, _playerCharacter); 
                 _playerShield.OnShieldHit += OnShieldHit;
                 ShieldDamageHandler.RegisterShield(_playerCharacter, _playerShield);
                 _renderer = new ShieldRenderer(_playerCharacter, _playerShield);
